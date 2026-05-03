@@ -469,6 +469,8 @@ def parse_args():
     parser.add_argument("num_trials", nargs="?", type=int, default=1)
     parser.add_argument("--train-steps", type=int, default=3375)
     parser.add_argument("--cooldown-frac", type=float, default=0.7)
+    parser.add_argument("--fw-alpha-cooldown-frac", type=float, default=0.0)
+    parser.add_argument("--fw-alpha-final-val", type=float, default=None)
     parser.add_argument("--lr", type=float, default=None)
     parser.add_argument("--beta-1", type=float, default=None)
     parser.add_argument("--nesterov", action=argparse.BooleanOptionalAction, default=None)
@@ -486,6 +488,8 @@ def parse_args():
     assert args.num_trials >= 1
     assert args.train_steps >= 1
     assert 0 < args.cooldown_frac <= 1
+    assert 0 <= args.fw_alpha_cooldown_frac <= 1
+    assert args.fw_alpha_final_val is None or args.fw_alpha_final_val >= 0
     args.val_mbs = args.mbs if args.val_mbs is None else args.val_mbs
     return args
 
@@ -551,6 +555,8 @@ for trial in range(args.num_trials):
     train_hparams = {
         "train_steps": args.train_steps,
         "cooldown_frac": args.cooldown_frac,
+        "fw_alpha_cooldown_frac": args.fw_alpha_cooldown_frac,
+        "fw_alpha_final_val": args.fw_alpha_final_val,
     }
     foof_hparams = {
         key: value for key, value in {
@@ -602,8 +608,20 @@ for trial in range(args.num_trials):
     for opt in optimizers:
         for group in opt.param_groups:
             group["initial_lr"] = group["lr"]
+            if "fw_alpha_mult" in group:
+                group["initial_fw_alpha_mult"] = group["fw_alpha_mult"]
 
     # learning rate schedule: stable then decay
+    def get_fw_alpha_mult(step, initial_val):
+        if args.fw_alpha_final_val is None or args.fw_alpha_cooldown_frac == 0:
+            return initial_val
+        progress = step / max(1, train_steps - 1)
+        assert 0 <= progress <= 1
+        if progress < 1 - args.fw_alpha_cooldown_frac:
+            return initial_val
+        alpha_progress = (progress - (1 - args.fw_alpha_cooldown_frac)) / args.fw_alpha_cooldown_frac
+        return initial_val + alpha_progress * (args.fw_alpha_final_val - initial_val)
+
     def set_hparams(step):
         progress = step / train_steps
         assert 0 <= progress < 1
@@ -614,6 +632,8 @@ for trial in range(args.num_trials):
         for opt in optimizers:
             for group in opt.param_groups:
                 group["lr"] = group["initial_lr"] * eta
+                if "initial_fw_alpha_mult" in group:
+                    group["fw_alpha_mult"] = get_fw_alpha_mult(step, group["initial_fw_alpha_mult"])
 
 
     ########################################

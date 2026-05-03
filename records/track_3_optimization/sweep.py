@@ -14,6 +14,22 @@ from pathlib import Path
 
 nproc_per_node = 8
 log_dir = "logs"
+default_hparams = {
+    "train_steps": 3375,
+    "cooldown_frac": 0.7,
+    "fw_alpha_cooldown_frac": 0.0,
+    "fw_alpha_final_val": None,
+    "lr": 0.02,
+    "beta_1": 0.95,
+    "nesterov": True,
+    "fw_alpha_method": "mean_iso",
+    "fw_alpha_mult": 1.0,
+    "fw_steps": 3,
+    "fw_gamma_method": "line_search",
+    "weight_decay": 0.02,
+    "mbs": 64,
+    "val_mbs": 64,
+}
 
 grid_blocks = [
     # {"lr": [0.01, 0.03]},
@@ -23,6 +39,7 @@ grid_blocks = [
 
 def main():
     repo_root = Path(__file__).resolve().parents[2]
+    resolved_log_dir = repo_root / log_dir
     block_runs = []
     for grid in grid_blocks:
         keys = list(grid)
@@ -35,10 +52,17 @@ def main():
     print(f"num_runs={sum(len(combos) for _, combos in block_runs)}")
     for grid, combos in block_runs:
         block_sweep_name = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        block_dir = Path(log_dir) / block_sweep_name
+        block_dir = resolved_log_dir / block_sweep_name
         block_dir.mkdir(parents=True, exist_ok=True)
         with (block_dir / "grid_block.json").open("w") as f:
-            json.dump(grid, f, indent=2)
+            runs = []
+            for combo in combos:
+                hparams = default_hparams | {
+                    key: value for key, value in combo.items() if value is not None
+                }
+                hparams["val_mbs"] = hparams["mbs"] if hparams["val_mbs"] is None else hparams["val_mbs"]
+                runs.append(hparams)
+            json.dump({"grid_block": grid, "runs": runs}, f, indent=2)
             f.write("\n")
         print(f"{block_sweep_name}: {len(combos)} runs", flush=True)
         for index, combo in enumerate(combos, start=1):
@@ -47,7 +71,7 @@ def main():
                 "--standalone",
                 f"--nproc_per_node={nproc_per_node}",
                 "records/track_3_optimization/train_gpt_simple.py",
-                "--log-dir", log_dir,
+                "--log-dir", str(resolved_log_dir),
                 "--sweep-name", block_sweep_name,
             ]
             for name, value in combo.items():
