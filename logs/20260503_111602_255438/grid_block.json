@@ -1,0 +1,38 @@
+{
+  "grid_block": {
+    "cooldown_frac": [
+      0.5
+    ],
+    "fw_alpha_cooldown_frac": [
+      0.5
+    ],
+    "fw_alpha_mult": [
+      3.0,
+      5.0,
+      10.0
+    ],
+    "fw_alpha_final_val": [
+      2.0
+    ]
+  },
+  "runs": [
+    {
+      "cooldown_frac": 0.5,
+      "fw_alpha_cooldown_frac": 0.5,
+      "fw_alpha_mult": 3.0,
+      "fw_alpha_final_val": 2.0
+    },
+    {
+      "cooldown_frac": 0.5,
+      "fw_alpha_cooldown_frac": 0.5,
+      "fw_alpha_mult": 5.0,
+      "fw_alpha_final_val": 2.0
+    },
+    {
+      "cooldown_frac": 0.5,
+      "fw_alpha_cooldown_frac": 0.5,
+      "fw_alpha_mult": 10.0,
+      "fw_alpha_final_val": 2.0
+    }
+  ]
+}

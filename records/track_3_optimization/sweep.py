@@ -56,7 +56,6 @@ def main():
                 hparams = {
                     key: value for key, value in combo.items() if value is not None
                 }
-                hparams["val_mbs"] = hparams["mbs"] if hparams["val_mbs"] is None else hparams["val_mbs"]
                 runs.append(hparams)
             json.dump({"grid_block": grid, "runs": runs}, f, indent=2)
             f.write("\n")

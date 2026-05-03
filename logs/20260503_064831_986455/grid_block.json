@@ -1,0 +1,21 @@
+{
+  "grid_block": {
+    "cooldown_frac": [
+      0.5
+    ],
+    "lr": [
+      0.01,
+      0.035
+    ]
+  },
+  "runs": [
+    {
+      "cooldown_frac": 0.5,
+      "lr": 0.01
+    },
+    {
+      "cooldown_frac": 0.5,
+      "lr": 0.035
+    }
+  ]
+}

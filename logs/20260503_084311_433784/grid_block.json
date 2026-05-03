@@ -1,0 +1,21 @@
+{
+  "grid_block": {
+    "cooldown_frac": [
+      0.5
+    ],
+    "fw_alpha_mult": [
+      5.0,
+      10.0
+    ]
+  },
+  "runs": [
+    {
+      "cooldown_frac": 0.5,
+      "fw_alpha_mult": 5.0
+    },
+    {
+      "cooldown_frac": 0.5,
+      "fw_alpha_mult": 10.0
+    }
+  ]
+}

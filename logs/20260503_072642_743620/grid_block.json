@@ -1,0 +1,31 @@
+{
+  "grid_block": {
+    "cooldown_frac": [
+      0.5
+    ],
+    "weight_decay": [
+      0.0,
+      0.01,
+      0.03,
+      0.05
+    ]
+  },
+  "runs": [
+    {
+      "cooldown_frac": 0.5,
+      "weight_decay": 0.0
+    },
+    {
+      "cooldown_frac": 0.5,
+      "weight_decay": 0.01
+    },
+    {
+      "cooldown_frac": 0.5,
+      "weight_decay": 0.03
+    },
+    {
+      "cooldown_frac": 0.5,
+      "weight_decay": 0.05
+    }
+  ]
+}
