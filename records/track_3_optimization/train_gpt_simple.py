@@ -308,8 +308,8 @@ class MuonFOOF(torch.optim.Optimizer):
         beta_1=0.95,
         nesterov=True,
         fw_alpha_method="mean_iso",
-        fw_alpha_mult=10.0,
-        fw_steps=3,
+        fw_alpha_mult=3.0,
+        fw_steps=5,
         fw_gamma_method="line_search",
         weight_decay=0.02,
     ):

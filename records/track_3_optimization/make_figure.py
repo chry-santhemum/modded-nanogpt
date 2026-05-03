@@ -30,7 +30,9 @@ runs = {
     'NorMuonH (best, 3275 steps)': '20260430_normuonh/f45b5dcf-16bb-4e83-b5c7-4ef4981f0e9f',
     'FOOF (default)': 'c718fa98-d45f-4b24-a01f-a6a0559c6a31',
     'FOOF (cooldown 0.5)': 'logs/20260503_035759_598139/20260503_035812_697861',
-    'FOOF (beta 0.9)': 'logs/20260503_041609_179584/20260503_041622_100851',
+    # 'FOOF (beta 0.9)': 'logs/20260503_041609_179584/20260503_041622_100851',
+    # 'FOOF (beta 0.99)': 'logs/20260503_041609_179584/20260503_043431_070366.txt',
+    'FOOF (cooldown 0.5 both)': 'logs/20260503_045252_672097/20260503_045305_632893.txt',
 }
 assert len(runs) <= len(colors)
 pattern = re.compile(r'step:(\d+)/(\d+)\s+val_loss:([0-9.]+)')

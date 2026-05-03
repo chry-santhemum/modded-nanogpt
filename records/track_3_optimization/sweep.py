@@ -14,30 +14,22 @@ from pathlib import Path
 
 nproc_per_node = 8
 log_dir = "logs"
-default_hparams = {
-    "train_steps": 3250,
-    "cooldown_frac": 0.7,
-    "fw_alpha_cooldown_frac": 0.0,
-    "fw_alpha_final_val": 1.0,
-    "lr": 0.02,
-    "beta_1": 0.95,
-    "nesterov": True,
-    "fw_alpha_method": "mean_iso",
-    "fw_alpha_mult": 10.0,
-    "fw_steps": 3,
-    "fw_gamma_method": "line_search",
-    "weight_decay": 0.02,
-    "mbs": 64,
-    "val_mbs": 64,
-}
 
 grid_blocks = [
     # default: step 3375, loss 3.28350
     # {"fw_alpha_method": ["first_fw"], "fw_alpha_mult": [1.0]},  # logs/20260503_033646, step 3375, loss 3.28643
     # {"cooldown_frac": [0.5]},  # logs/20260503_035759_598139, step 3375, loss 3.27764
     # {"beta_1": [0.9, 0.99]},   # logs/20260503_041609_179584, step 3375, loss [3.28809, 3.30654]
-    {"fw_alpha_mult": [5.0], "fw_alpha_cooldown_frac": [0.5], "cooldown_frac": [0.5]}
-    # {"lr": [0.01, 0.03]},
+    # {"fw_alpha_mult": [5.0], "fw_alpha_cooldown_frac": [0.5], "cooldown_frac": [0.5]}
+    # changed fw_steps = 5 and fw_alpha_mult = 3.0 from here on
+    {"cooldown_frac": [0.2, 0.35, 0.5, 0.7]},
+    {"cooldown_frac": [0.5], "lr": [0.01, 0.035]},
+    {"cooldown_frac": [0.5], "weight_decay": [0.0, 0.01, 0.03, 0.05]},
+    {"cooldown_frac": [0.5], "fw_alpha_mult": [5.0, 10.0]},
+    {"cooldown_frac": [0.5], "fw_alpha_cooldown_frac": [0.5], "fw_alpha_mult": [3.0, 5.0], "fw_alpha_final_val": [0.0]},
+    {"cooldown_frac": [0.2], "fw_alpha_cooldown_frac": [0.2], "fw_alpha_mult": [3.0], "fw_alpha_final_val": [0.0]},
+    {"cooldown_frac": [0.5], "fw_alpha_cooldown_frac": [0.5], "fw_alpha_mult": [3.0, 5.0, 10.0], "fw_alpha_final_val": [1.0]},
+    {"cooldown_frac": [0.5], "fw_alpha_cooldown_frac": [0.5], "fw_alpha_mult": [3.0, 5.0, 10.0], "fw_alpha_final_val": [2.0]},
 ]
 
 
@@ -61,7 +53,7 @@ def main():
         with (block_dir / "grid_block.json").open("w") as f:
             runs = []
             for combo in combos:
-                hparams = default_hparams | {
+                hparams = {
                     key: value for key, value in combo.items() if value is not None
                 }
                 hparams["val_mbs"] = hparams["mbs"] if hparams["val_mbs"] is None else hparams["val_mbs"]
