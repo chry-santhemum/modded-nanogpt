@@ -32,9 +32,10 @@ default_hparams = {
 }
 
 grid_blocks = [
-    {"fw_alpha_method": ["first_fw"], "fw_alpha_mult": [1.0]},  # logs/20260503_033646
-    {"cooldown_frac": [0.5]},  # logs/20260503_035759_598139  
-    {"beta_1": [0.9, 0.99]},   # logs/20260503_041609_179584
+    # default: step 3375, loss 3.28350
+    # {"fw_alpha_method": ["first_fw"], "fw_alpha_mult": [1.0]},  # logs/20260503_033646, step 3375, loss 3.28643
+    # {"cooldown_frac": [0.5]},  # logs/20260503_035759_598139, step 3375, loss 3.27764
+    # {"beta_1": [0.9, 0.99]},   # logs/20260503_041609_179584, step 3375, loss [3.28809, 3.30654]
     {"fw_alpha_mult": [5.0], "fw_alpha_cooldown_frac": [0.5], "cooldown_frac": [0.5]}
     # {"lr": [0.01, 0.03]},
 ]
