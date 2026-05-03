@@ -30,13 +30,20 @@ grid_blocks = [
     # {"cooldown_frac": [0.2], "fw_alpha_cooldown_frac": [0.2], "fw_alpha_mult": [3.0], "fw_alpha_final_val": [0.0]},
     # {"cooldown_frac": [0.5], "fw_alpha_cooldown_frac": [0.5], "fw_alpha_mult": [3.0, 5.0, 10.0], "fw_alpha_final_val": [1.0]},
     # {"cooldown_frac": [0.5], "fw_alpha_cooldown_frac": [0.5], "fw_alpha_mult": [3.0, 5.0, 10.0], "fw_alpha_final_val": [2.0]},
+    # {
+    #     "cooldown_frac": [0.5],
+    #     "fw_alpha_cooldown_frac": [0.5],
+    #     "lr": [0.035, 0.05],
+    #     "weight_decay": [0.02],
+    #     "fw_alpha_mult": [10.0],
+    #     "fw_alpha_final_val": [2.0]
+    # },
     {
-        "cooldown_frac": [0.5],
-        "fw_alpha_cooldown_frac": [0.5],
-        "lr": [0.035, 0.05],
+        "cooldown_frac": [0.6],
+        "lr": [0.04],
         "weight_decay": [0.02],
-        "fw_alpha_mult": [10.0],
-        "fw_alpha_final_val": [2.0]
+        "fw_alpha_mult": [3.0],
+        "fw_alpha_method": ["first_fw"],
     }
 ]
 
