@@ -5,12 +5,13 @@ This file descends from the [NanoGPT speedrun](https://github.com/KellerJordan/m
 It was prepared as a simplified version of the speedrun for use in neural net optimization research.
 """
 
+import argparse
 import os
 import sys
 with open(sys.argv[0]) as f:
     code = f.read() # read the code of this file ASAP, for logging
-import uuid
 import time
+from datetime import datetime
 from pathlib import Path
 
 import torch
@@ -463,9 +464,37 @@ def reset_activation_stats(activation_stats):
         stat["count"].zero_()
 
 
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("num_trials", nargs="?", type=int, default=1)
+    parser.add_argument("--train-steps", type=int, default=3375)
+    parser.add_argument("--cooldown-frac", type=float, default=0.7)
+    parser.add_argument("--foof-lr", type=float, default=None)
+    parser.add_argument("--foof-beta1", type=float, default=None)
+    parser.add_argument("--foof-nesterov", action=argparse.BooleanOptionalAction, default=None)
+    parser.add_argument("--foof-alpha-method", choices=["mean_iso", "first_fw"], default=None)
+    parser.add_argument("--foof-alpha-mult", type=float, default=None)
+    parser.add_argument("--foof-fw-steps", type=int, default=None)
+    parser.add_argument("--foof-gamma-method", choices=["line_search", "default"], default=None)
+    parser.add_argument("--foof-weight-decay", type=float, default=None)
+    parser.add_argument("--log-dir", type=Path, default=Path("logs"))
+    parser.add_argument("--sweep-name", default=None)
+    parser.add_argument("--mbs", type=int, default=64)
+    parser.add_argument("--val-mbs", type=int, default=None)
+    parser.add_argument("--local-rank", "--local_rank", type=int, default=None)
+    args = parser.parse_args()
+    assert args.num_trials >= 1
+    assert args.train_steps >= 1
+    assert 0 < args.cooldown_frac <= 1
+    args.val_mbs = args.mbs if args.val_mbs is None else args.val_mbs
+    return args
+
+
 ########################################
 #                Setup                 #
 ########################################
+
+args = parse_args()
 
 # torchrun sets these env variables
 device = torch.device("cuda", int(os.environ["LOCAL_RANK"]))
@@ -477,8 +506,12 @@ assert 8 % dist.get_world_size() == 0
 
 # logging setup
 if dist.get_rank() == 0:
-    os.makedirs("logs", exist_ok=True)
-    logfile = f"logs/{uuid.uuid4()}.txt"
+    log_dir = args.log_dir
+    if args.sweep_name is not None:
+        log_dir = log_dir / args.sweep_name
+    log_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    logfile = log_dir / f"{timestamp}.txt"
     print(logfile)
 def print0(s, console=False, log=True):
     if dist.get_rank() == 0:
@@ -497,7 +530,8 @@ print0("="*100)
 
 val_tokens = 20 * 524288
 batch_size = 8 * 64 * 1024
-mbs = int(os.environ.get("MBS", 64))
+mbs = args.mbs
+val_mbs = args.val_mbs
 val_inputs, val_targets = next(distributed_data_generator("data/fineweb10B/fineweb_val_*.bin", val_tokens))
 
 model = GPT(vocab_size=50304, num_layers=12, model_dim=768).cuda()
@@ -506,10 +540,7 @@ model.compile(dynamic=False)
 matrix_params = [p for p in model.blocks.parameters() if p.ndim >= 2]
 activation_stats = add_activation_stat_hooks(model, matrix_params)
 
-
-num_trials = int(sys.argv[-1]) if len(sys.argv) > 1 else 1
-
-for _ in range(num_trials):
+for trial in range(args.num_trials):
 
 
     ########################################
@@ -517,7 +548,26 @@ for _ in range(num_trials):
     ########################################
 
     # we want to minimize this while still reaching 3.28 val loss
-    train_steps = 3375
+    train_hparams = {
+        "train_steps": args.train_steps,
+        "cooldown_frac": args.cooldown_frac,
+    }
+    foof_hparams = {
+        key: value for key, value in {
+            "lr": args.foof_lr,
+            "beta_1": args.foof_beta1,
+            "nesterov": args.foof_nesterov,
+            "fw_alpha_method": args.foof_alpha_method,
+            "fw_alpha_mult": args.foof_alpha_mult,
+            "fw_steps": args.foof_fw_steps,
+            "fw_gamma_method": args.foof_gamma_method,
+            "weight_decay": args.foof_weight_decay,
+        }.items() if value is not None
+    }
+    train_steps = train_hparams["train_steps"]
+    cooldown_frac = train_hparams["cooldown_frac"]
+    print0(f"trial:{trial+1}/{args.num_trials} train_hparams:{train_hparams}", console=True)
+    print0(f"trial:{trial+1}/{args.num_trials} foof_hparams:{foof_hparams}", console=True)
 
     # initialize model parameters
     for name, p in model.named_parameters():
@@ -544,14 +594,7 @@ for _ in range(num_trials):
                        betas=(0.8, 0.95), eps=1e-10, weight_decay=0, fused=True)
     optimizer2 = MuonFOOF(
         matrix_params, activation_stats,
-        lr=0.02,
-        beta_1=0.95,
-        nesterov=True,
-        fw_alpha_method="mean_iso",
-        fw_alpha_mult=2.0,
-        fw_steps=3,
-        fw_gamma_method="line_search",
-        weight_decay=0.02,
+        **foof_hparams,
     )
     optimizers = [optimizer1, optimizer2]
     assert set(p for opt in optimizers for group in opt.param_groups
@@ -561,7 +604,7 @@ for _ in range(num_trials):
             group["initial_lr"] = group["lr"]
 
     # learning rate schedule: stable then decay
-    def set_hparams(step, cooldown_frac=0.7):
+    def set_hparams(step):
         progress = step / train_steps
         assert 0 <= progress < 1
         if progress < 1 - cooldown_frac:
@@ -598,9 +641,12 @@ for _ in range(num_trials):
             model.eval()
             val_loss = 0
             with torch.no_grad():
-                assert len(val_inputs) % mbs == 0
-                for i in range(len(val_inputs) // mbs):
-                    val_loss += model(val_inputs[i*mbs:(i+1)*mbs], val_targets[i*mbs:(i+1)*mbs])
+                assert len(val_inputs) % val_mbs == 0
+                for i in range(len(val_inputs) // val_mbs):
+                    val_loss += model(
+                        val_inputs[i*val_mbs:(i+1)*val_mbs],
+                        val_targets[i*val_mbs:(i+1)*val_mbs],
+                    )
             dist.all_reduce(val_loss, op=dist.ReduceOp.SUM)
             val_loss /= val_tokens
             print0(f"step:{step}/{train_steps} val_loss:{val_loss:.5f} train_time:{training_time:.3f}s"
