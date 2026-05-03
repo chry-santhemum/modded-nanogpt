@@ -151,9 +151,10 @@ class GPT(nn.Module):
         x = self.norm1(self.embed(inputs))
         for block in self.blocks:
             x = block(x)
-        logits = self.proj(self.norm2(x)).float()
+        logits = self.proj(self.norm2(x))
         logits = 15 * logits * (logits.square() + 15**2).rsqrt()
-        return F.cross_entropy(logits.view(targets.numel(), -1), targets.view(-1), reduction="sum")
+        loss = F.cross_entropy(logits.view(targets.numel(), -1), targets.view(-1), reduction="sum")
+        return loss.float()
 
 
 ########################################
@@ -283,7 +284,8 @@ class Muon(torch.optim.Optimizer):
         rank = dist.get_rank()
         for group in self.param_groups:
             params = group["params"]
-            params_pad = params + [torch.empty_like(params[-1])] * (world_size - len(params) % world_size)
+            pad_count = (-len(params)) % world_size
+            params_pad = params + [torch.empty_like(params[-1]) for _ in range(pad_count)]
             for base_i in range(0, len(params), world_size):
                 if base_i + rank < len(params):
                     p = params[base_i + rank]
@@ -341,8 +343,8 @@ class MuonFOOF(torch.optim.Optimizer):
             beta_prod = group["beta_prod"]
             bias_correction = 1 - beta_prod
             params = group["params"]
-            pad_count = world_size - len(params) % world_size
-            params_pad = params + [torch.empty_like(params[-1])] * pad_count
+            pad_count = (-len(params)) % world_size
+            params_pad = params + [torch.empty_like(params[-1]) for _ in range(pad_count)]
             for base_i in range(0, len(params), world_size):
                 if base_i + rank < len(params):
                     p = params[base_i + rank]
@@ -351,7 +353,9 @@ class MuonFOOF(torch.optim.Optimizer):
                     if len(state) == 0:
                         state["momentum"] = torch.zeros_like(p, dtype=torch.float32)
                         state["mean_ema"] = torch.zeros_like(stat["mean"])
-                        state["uncentered_cov_ema"] = torch.zeros_like(stat["uncentered_cov"])
+                        state["uncentered_cov_ema"] = torch.zeros_like(
+                            stat["uncentered_cov"], dtype=torch.bfloat16
+                        )
 
                     grad = p.grad.float()
                     momentum = state["momentum"]
@@ -367,8 +371,8 @@ class MuonFOOF(torch.optim.Optimizer):
 
                     state["mean_ema"].mul_(beta).add_(stat["mean"], alpha=1 - beta)
                     state["uncentered_cov_ema"].mul_(beta).add_(stat["uncentered_cov"], alpha=1 - beta)
-                    mean = state["mean_ema"] / bias_correction
-                    raw_second_moment = state["uncentered_cov_ema"] / bias_correction
+                    mean = state["mean_ema"].float() / bias_correction
+                    raw_second_moment = state["uncentered_cov_ema"].float() / bias_correction
 
                     if group["fw_alpha_method"] == "mean_iso":
                         sigma_sq = (torch.trace(raw_second_moment) - torch.sum(mean * mean)) / p.size(1)
@@ -407,9 +411,9 @@ def add_activation_stat_hooks(model, tracked_params):
     def record_activation_stats(module, args):
         if not module.training or module.weight not in tracked_params:
             return
-        x = args[0].detach().reshape(-1, args[0].shape[-1]).float()
+        x = args[0].detach().reshape(-1, args[0].shape[-1]).bfloat16()
         stat = activation_stats[module.weight]
-        stat["mean"].add_(x.sum(dim=0))
+        stat["mean"].add_(x.sum(dim=0).float())
         stat["uncentered_cov"].addmm_(x.T, x)
         stat["count"].add_(x.shape[0])
 
@@ -418,7 +422,9 @@ def add_activation_stat_hooks(model, tracked_params):
             in_features = module.weight.shape[1]
             activation_stats[module.weight] = {
                 "mean": torch.zeros(in_features, device=module.weight.device),
-                "uncentered_cov": torch.zeros(in_features, in_features, device=module.weight.device),
+                "uncentered_cov": torch.zeros(
+                    in_features, in_features, device=module.weight.device, dtype=torch.bfloat16
+                ),
                 "count": torch.zeros((), device=module.weight.device),
             }
             module.register_forward_pre_hook(record_activation_stats)
@@ -491,7 +497,7 @@ print0("="*100)
 
 val_tokens = 20 * 524288
 batch_size = 8 * 64 * 1024
-mbs = 64
+mbs = int(os.environ.get("MBS", 64))
 val_inputs, val_targets = next(distributed_data_generator("data/fineweb10B/fineweb_val_*.bin", val_tokens))
 
 model = GPT(vocab_size=50304, num_layers=12, model_dim=768).cuda()
