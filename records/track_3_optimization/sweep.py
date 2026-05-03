@@ -16,10 +16,8 @@ nproc_per_node = 8
 log_dir = "logs"
 
 grid_blocks = [
-    {},
-    # {"lr": [0.01, 0.02, 0.04]},
-    # {"fw_alpha_method": ["first_fw"]},
-    # {"lr": [0.01, 0.02], "fw_alpha_mult": [1.0, 2.0]},
+    # {"lr": [0.01, 0.03]},
+    {""}
 ]
 
 

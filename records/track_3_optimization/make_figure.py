@@ -5,9 +5,9 @@ import matplotlib.pyplot as plt
 runs = {
     #'Muon (old best, 3500 steps)': ('311d7833-8dfc-43ea-a55c-fd313a11c4a8', '#d04a1f'),
     'Muon (best, 3375 steps)': ('51ece938-03c5-4343-8dcc-3f3336b07008', '#ffa500'),
-    'AdamW (best, 5625 steps)': ('a63a68d1-24aa-4a22-af9a-224e43209ea4', '#1f77b4'),
+    # 'AdamW (best, 5625 steps)': ('a63a68d1-24aa-4a22-af9a-224e43209ea4', '#1f77b4'),
     'MuonH (best, 3325 steps)': ('20260430_muonh/9319c798-6643-464a-b407-b05468e468f5', '#2ca02c'),
-    'AdamH (best, 4875 steps)': ('20260430_adamh/7533dd87-107f-4a4f-8229-acbec0fb00ac', '#9467bd'),
+    # 'AdamH (best, 4875 steps)': ('20260430_adamh/7533dd87-107f-4a4f-8229-acbec0fb00ac', '#9467bd'),
     'Muon² (best, 3325 steps)': ('20260501_muonsq/bb903816-ea27-4f5f-8028-c963d38c6a7f', '#e377c2'),
     'NorMuonH (best, 3275 steps)': ('20260430_normuonh/f45b5dcf-16bb-4e83-b5c7-4ef4981f0e9f', '#32CD32'),
     'FOOF (dev, 3375 steps)': ('c718fa98-d45f-4b24-a01f-a6a0559c6a31', '#d04a1f'),
@@ -42,13 +42,13 @@ for label, (logfile, color) in runs.items():
         steps,
         losses,
         marker='o',
-        markersize=3.5,
-        linewidth=2.2,
+        markersize=2.0,
+        linewidth=1.0,
         label=label,
         color=color,
     )
 
-ax.axhline(3.28, color='gray', linestyle='--', linewidth=1.5)
+ax.axhline(3.28, color='gray', linestyle='--', linewidth=1.0)
 ax.annotate(
     'target=3.28',
     xy=(0, 3.28),
