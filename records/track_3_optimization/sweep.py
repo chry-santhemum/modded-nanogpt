@@ -33,7 +33,8 @@ default_hparams = {
 
 grid_blocks = [
     # {"lr": [0.01, 0.03]},
-    {""}
+    {"cooldown_frac": [0.5]},
+    {"beta_1": [0.9, 0.99]},
 ]
 
 
