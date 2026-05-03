@@ -179,6 +179,89 @@ def zeropower_via_newtonschulz5(G: Tensor) -> Tensor:
         X = X.mT
     return X
 
+
+def apply_raw_second_moment_torch(update: Tensor, raw_second_moment: Tensor) -> Tensor:
+    """Apply E[x x^T] to a PyTorch Linear update in (fan_out, fan_in) layout."""
+    return update.float() @ raw_second_moment.float()
+
+
+def precondition_by_isotropic_plus_mean(
+    momentum_update: Tensor,
+    mean: Tensor,
+    sigma_sq: Tensor,
+    eps: float = 1e-8,
+) -> Tensor:
+    """Apply (sigma_sq I + mean mean^T)^(-1) on the input side."""
+    momentum_update = momentum_update.float()
+    mean = mean.float()
+    sigma_sq = sigma_sq.float()
+    mean_sq = torch.sum(mean * mean)
+    mean_proj = momentum_update @ mean
+    return (
+        momentum_update
+        - mean_proj[:, None] * (mean[None, :] / (sigma_sq + mean_sq + eps))
+    ) / (sigma_sq + eps)
+
+
+def estimate_mean_iso_alpha(
+    momentum_update: Tensor,
+    mean: Tensor,
+    sigma_sq: Tensor,
+    eps: float = 1e-8,
+) -> Tensor:
+    preconditioned_momentum = precondition_by_isotropic_plus_mean(
+        momentum_update,
+        mean,
+        sigma_sq,
+        eps=eps,
+    )
+    cross_scale = torch.linalg.vector_norm(preconditioned_momentum)
+    cross_scale /= min(momentum_update.shape) ** 0.5
+    return 1.0 / (cross_scale + eps)
+
+
+def estimate_first_fw_alpha(
+    momentum_update: Tensor,
+    raw_second_moment: Tensor,
+    eps: float = 1e-8,
+) -> Tensor:
+    momentum_update = momentum_update.float()
+    atom = zeropower_via_newtonschulz5(momentum_update)
+    curved_atom = apply_raw_second_moment_torch(atom, raw_second_moment)
+    num = torch.sum(momentum_update * atom)
+    den = torch.sum(atom * curved_atom)
+    return den / (num + eps)
+
+
+def solve_spectral_fw(
+    momentum_update: Tensor,
+    raw_second_moment: Tensor,
+    alpha: Tensor,
+    fw_steps: int,
+    fw_gamma_method: str,
+    eps: float = 1e-8,
+) -> Tensor:
+    """Run the muon_foof Frank-Wolfe loop in PyTorch Linear weight layout."""
+    target = alpha * momentum_update.float()
+    raw_second_moment = raw_second_moment.float()
+    update = torch.zeros_like(target)
+
+    for i in range(fw_steps):
+        residual = target - apply_raw_second_moment_torch(update, raw_second_moment)
+        atom = zeropower_via_newtonschulz5(residual)
+        direction = atom - update
+        if fw_gamma_method == "line_search":
+            direction_hess = apply_raw_second_moment_torch(direction, raw_second_moment)
+            gamma = torch.sum(residual * direction) / (torch.sum(direction * direction_hess) + eps)
+            gamma = torch.clamp(gamma, 0.0, 1.0)
+        elif fw_gamma_method == "default":
+            gamma = 2.0 / (i + 2.0)
+        else:
+            raise ValueError(f"Unknown FW gamma method: {fw_gamma_method}")
+        update = update + gamma * direction
+    return update
+
+
 @torch.compile
 def muon_update(grad, momentum, mu=0.95, nesterov=True):
     momentum.lerp_(grad, 1 - mu)
@@ -211,6 +294,167 @@ class Muon(torch.optim.Optimizer):
                     p.mul_(1 - group["lr"] * group["weight_decay"])
                     p.add_(update, alpha=-group["lr"])
                 dist.all_gather(params_pad[base_i:base_i + world_size], params_pad[base_i + rank])
+
+
+class MuonFOOF(torch.optim.Optimizer):
+    def __init__(
+        self,
+        params,
+        activation_stats,
+        lr=0.02,
+        beta_1=0.95,
+        nesterov=True,
+        fw_alpha_method="mean_iso",
+        fw_alpha_mult=1.0,
+        fw_steps=3,
+        fw_gamma_method="line_search",
+        weight_decay=0.02,
+    ):
+        assert isinstance(params, list) and len(params) >= 1
+        assert isinstance(params[0], torch.nn.Parameter)
+        assert fw_steps >= 1
+        assert fw_alpha_mult >= 0.0
+        assert fw_alpha_method in {"mean_iso", "first_fw"}
+        assert fw_gamma_method in {"line_search", "default"}
+        params = sorted(params, key=lambda x: x.size(), reverse=True)
+        defaults = dict(
+            lr=lr,
+            beta_1=beta_1,
+            nesterov=nesterov,
+            fw_alpha_method=fw_alpha_method,
+            fw_alpha_mult=fw_alpha_mult,
+            fw_steps=fw_steps,
+            fw_gamma_method=fw_gamma_method,
+            weight_decay=weight_decay,
+            beta_prod=1.0,
+        )
+        super().__init__(params, defaults)
+        self.activation_stats = activation_stats
+
+    @torch.no_grad()
+    def step(self):
+        world_size = dist.get_world_size()
+        rank = dist.get_rank()
+        for group in self.param_groups:
+            beta = group["beta_1"]
+            group["beta_prod"] *= beta
+            beta_prod = group["beta_prod"]
+            bias_correction = 1 - beta_prod
+            params = group["params"]
+            pad_count = world_size - len(params) % world_size
+            params_pad = params + [torch.empty_like(params[-1])] * pad_count
+            for base_i in range(0, len(params), world_size):
+                if base_i + rank < len(params):
+                    p = params[base_i + rank]
+                    stat = self.activation_stats[p]
+                    state = self.state[p]
+                    if len(state) == 0:
+                        state["momentum"] = torch.zeros_like(p, dtype=torch.float32)
+                        state["mean_ema"] = torch.zeros_like(stat["mean"])
+                        state["uncentered_cov_ema"] = torch.zeros_like(stat["uncentered_cov"])
+
+                    grad = p.grad.float()
+                    momentum = state["momentum"]
+                    momentum.mul_(beta).add_(grad, alpha=1 - beta)
+                    if group["nesterov"]:
+                        beta_prod_next = beta * beta_prod
+                        momentum_update = (
+                            beta * momentum / (1 - beta_prod_next)
+                            + (1 - beta) * grad / bias_correction
+                        )
+                    else:
+                        momentum_update = momentum / bias_correction
+
+                    state["mean_ema"].mul_(beta).add_(stat["mean"], alpha=1 - beta)
+                    state["uncentered_cov_ema"].mul_(beta).add_(stat["uncentered_cov"], alpha=1 - beta)
+                    mean = state["mean_ema"] / bias_correction
+                    raw_second_moment = state["uncentered_cov_ema"] / bias_correction
+
+                    if group["fw_alpha_method"] == "mean_iso":
+                        sigma_sq = (torch.trace(raw_second_moment) - torch.sum(mean * mean)) / p.size(1)
+                        alpha_base = estimate_mean_iso_alpha(momentum_update, mean, sigma_sq)
+                    elif group["fw_alpha_method"] == "first_fw":
+                        alpha_base = estimate_first_fw_alpha(
+                            momentum_update,
+                            raw_second_moment,
+                        )
+                    alpha = group["fw_alpha_mult"] * alpha_base
+                    update = solve_spectral_fw(
+                        momentum_update,
+                        raw_second_moment,
+                        alpha=alpha,
+                        fw_steps=group["fw_steps"],
+                        fw_gamma_method=group["fw_gamma_method"],
+                    )
+                    update *= max(1, p.size(0) / p.size(1))**0.5
+
+                    p.mul_(1 - group["lr"] * group["weight_decay"])
+                    p.add_(update, alpha=-group["lr"])
+                dist.all_gather(params_pad[base_i:base_i + world_size], params_pad[base_i + rank])
+
+
+def add_activation_stat_hooks(model, tracked_params):
+    """
+    Track per-step input statistics for Linear weights in tracked_params.
+
+    For a Linear weight shaped (out_features, in_features), the tracked
+    activation mean has shape (in_features,), and the uncentered covariance
+    E[x.T @ x] has shape (in_features, in_features).
+    """
+    tracked_params = set(tracked_params)
+    activation_stats = {}
+
+    def record_activation_stats(module, args):
+        if not module.training or module.weight not in tracked_params:
+            return
+        x = args[0].detach().reshape(-1, args[0].shape[-1]).float()
+        stat = activation_stats[module.weight]
+        stat["mean"].add_(x.sum(dim=0))
+        stat["uncentered_cov"].addmm_(x.T, x)
+        stat["count"].add_(x.shape[0])
+
+    for module in model.modules():
+        if isinstance(module, Linear) and module.weight in tracked_params:
+            in_features = module.weight.shape[1]
+            activation_stats[module.weight] = {
+                "mean": torch.zeros(in_features, device=module.weight.device),
+                "uncentered_cov": torch.zeros(in_features, in_features, device=module.weight.device),
+                "count": torch.zeros((), device=module.weight.device),
+            }
+            module.register_forward_pre_hook(record_activation_stats)
+    return activation_stats
+
+
+def finalize_activation_stats(activation_stats):
+    """
+    Convert local per-step sums to global averages.
+
+    This relies on each rank seeing the same number of activation rows, which
+    holds for this script because batch_size is evenly split across ranks.
+    """
+    world_size = dist.get_world_size()
+    for stat in activation_stats.values():
+        assert stat["count"].item() > 0
+        stat["mean"].div_(stat["count"])
+        stat["uncentered_cov"].div_(stat["count"])
+        dist.all_reduce(stat["mean"], op=dist.ReduceOp.SUM)
+        dist.all_reduce(stat["uncentered_cov"], op=dist.ReduceOp.SUM)
+        stat["mean"].div_(world_size)
+        stat["uncentered_cov"].div_(world_size)
+
+
+def clear_current_activation_stats(activation_stats):
+    for stat in activation_stats.values():
+        stat["mean"].zero_()
+        stat["uncentered_cov"].zero_()
+        stat["count"].zero_()
+
+
+def reset_activation_stats(activation_stats):
+    for stat in activation_stats.values():
+        stat["mean"].zero_()
+        stat["uncentered_cov"].zero_()
+        stat["count"].zero_()
 
 
 ########################################
@@ -253,6 +497,9 @@ val_inputs, val_targets = next(distributed_data_generator("data/fineweb10B/finew
 model = GPT(vocab_size=50304, num_layers=12, model_dim=768).cuda()
 model.compile(dynamic=False)
 
+matrix_params = [p for p in model.blocks.parameters() if p.ndim >= 2]
+activation_stats = add_activation_stat_hooks(model, matrix_params)
+
 
 num_trials = int(sys.argv[-1]) if len(sys.argv) > 1 else 1
 
@@ -282,14 +529,24 @@ for _ in range(num_trials):
             w.normal_(mean=1, std=0)
         else:
             raise Exception(f"Uninitialized parameter: {name}")
+    reset_activation_stats(activation_stats)
 
     # create the optimizer(s)
     optimizer1 = AdamW([dict(params=[model.embed.weight], lr=0.3),
                         dict(params=[model.proj.weight], lr=1/320),
                         dict(params=[p for p in model.parameters() if p.ndim < 2], lr=0.01)],
                        betas=(0.8, 0.95), eps=1e-10, weight_decay=0, fused=True)
-    optimizer2 = Muon([p for p in model.blocks.parameters() if p.ndim >= 2],
-                      lr=0.025, weight_decay=0.025)
+    optimizer2 = MuonFOOF(
+        matrix_params, activation_stats,
+        lr=0.02,
+        beta_1=0.95,
+        nesterov=True,
+        fw_alpha_method="mean_iso",
+        fw_alpha_mult=2.0,
+        fw_steps=3,
+        fw_gamma_method="line_search",
+        weight_decay=0.02,
+    )
     optimizers = [optimizer1, optimizer2]
     assert set(p for opt in optimizers for group in opt.param_groups
                for p in group["params"]) == set(model.parameters())
@@ -359,10 +616,12 @@ for _ in range(num_trials):
         for name, p in model.named_parameters():
             assert p.grad is not None, name
             dist.all_reduce(p.grad, op=dist.ReduceOp.SUM)
+        finalize_activation_stats(activation_stats)
         # set optimization hyperparameters and take a step
         set_hparams(step)
         for opt in optimizers:
             opt.step()
+        clear_current_activation_stats(activation_stats)
         model.zero_grad(set_to_none=True)
         approx_training_time = training_time + (time.perf_counter() - t0)
         print0(f"step:{step+1}/{train_steps} train_time:{approx_training_time:.3f}s"
