@@ -469,14 +469,14 @@ def parse_args():
     parser.add_argument("num_trials", nargs="?", type=int, default=1)
     parser.add_argument("--train-steps", type=int, default=3375)
     parser.add_argument("--cooldown-frac", type=float, default=0.7)
-    parser.add_argument("--foof-lr", type=float, default=None)
-    parser.add_argument("--foof-beta1", type=float, default=None)
-    parser.add_argument("--foof-nesterov", action=argparse.BooleanOptionalAction, default=None)
-    parser.add_argument("--foof-alpha-method", choices=["mean_iso", "first_fw"], default=None)
-    parser.add_argument("--foof-alpha-mult", type=float, default=None)
-    parser.add_argument("--foof-fw-steps", type=int, default=None)
-    parser.add_argument("--foof-gamma-method", choices=["line_search", "default"], default=None)
-    parser.add_argument("--foof-weight-decay", type=float, default=None)
+    parser.add_argument("--lr", type=float, default=None)
+    parser.add_argument("--beta-1", type=float, default=None)
+    parser.add_argument("--nesterov", action=argparse.BooleanOptionalAction, default=None)
+    parser.add_argument("--fw-alpha-method", choices=["mean_iso", "first_fw"], default=None)
+    parser.add_argument("--fw-alpha-mult", type=float, default=None)
+    parser.add_argument("--fw-steps", type=int, default=None)
+    parser.add_argument("--fw-gamma-method", choices=["line_search", "default"], default=None)
+    parser.add_argument("--weight-decay", type=float, default=None)
     parser.add_argument("--log-dir", type=Path, default=Path("logs"))
     parser.add_argument("--sweep-name", default=None)
     parser.add_argument("--mbs", type=int, default=64)
@@ -554,14 +554,14 @@ for trial in range(args.num_trials):
     }
     foof_hparams = {
         key: value for key, value in {
-            "lr": args.foof_lr,
-            "beta_1": args.foof_beta1,
-            "nesterov": args.foof_nesterov,
-            "fw_alpha_method": args.foof_alpha_method,
-            "fw_alpha_mult": args.foof_alpha_mult,
-            "fw_steps": args.foof_fw_steps,
-            "fw_gamma_method": args.foof_gamma_method,
-            "weight_decay": args.foof_weight_decay,
+            "lr": args.lr,
+            "beta_1": args.beta_1,
+            "nesterov": args.nesterov,
+            "fw_alpha_method": args.fw_alpha_method,
+            "fw_alpha_mult": args.fw_alpha_mult,
+            "fw_steps": args.fw_steps,
+            "fw_gamma_method": args.fw_gamma_method,
+            "weight_decay": args.weight_decay,
         }.items() if value is not None
     }
     train_steps = train_hparams["train_steps"]

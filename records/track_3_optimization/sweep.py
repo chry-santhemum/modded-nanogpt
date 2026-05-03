@@ -17,9 +17,9 @@ log_dir = "logs"
 
 grid_blocks = [
     {},
-    # {"foof_lr": [0.01, 0.02, 0.04]},
-    # {"foof_alpha_mult": [0.5, 1.0, 2.0]},
-    # {"foof_lr": [0.01, 0.02], "foof_alpha_mult": [1.0, 2.0]},
+    # {"lr": [0.01, 0.02, 0.04]},
+    # {"fw_alpha_method": ["first_fw"]},
+    # {"lr": [0.01, 0.02], "fw_alpha_mult": [1.0, 2.0]},
 ]
 
 
