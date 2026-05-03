@@ -2,16 +2,37 @@ import re
 import math
 import matplotlib.pyplot as plt
 
+colors = [
+    "#1f77b4",
+    "#ff7f0e",
+    "#2ca02c",
+    "#d62728",
+    "#9467bd",
+    "#8c564b",
+    "#e377c2",
+    "#7f7f7f",
+    "#bcbd22",
+    "#17becf",
+    "#000000",
+    "#ff1493",
+    "#00ced1",
+    "#ffd700",
+    "#4b0082",
+]
+
 runs = {
     #'Muon (old best, 3500 steps)': ('311d7833-8dfc-43ea-a55c-fd313a11c4a8', '#d04a1f'),
-    'Muon (best, 3375 steps)': ('51ece938-03c5-4343-8dcc-3f3336b07008', '#ffa500'),
-    # 'AdamW (best, 5625 steps)': ('a63a68d1-24aa-4a22-af9a-224e43209ea4', '#1f77b4'),
-    'MuonH (best, 3325 steps)': ('20260430_muonh/9319c798-6643-464a-b407-b05468e468f5', '#2ca02c'),
-    # 'AdamH (best, 4875 steps)': ('20260430_adamh/7533dd87-107f-4a4f-8229-acbec0fb00ac', '#9467bd'),
-    'Muon² (best, 3325 steps)': ('20260501_muonsq/bb903816-ea27-4f5f-8028-c963d38c6a7f', '#e377c2'),
-    'NorMuonH (best, 3275 steps)': ('20260430_normuonh/f45b5dcf-16bb-4e83-b5c7-4ef4981f0e9f', '#32CD32'),
-    'FOOF (dev, 3375 steps)': ('c718fa98-d45f-4b24-a01f-a6a0559c6a31', '#d04a1f'),
+    'Muon (best, 3375 steps)': '51ece938-03c5-4343-8dcc-3f3336b07008',
+    # 'AdamW (best, 5625 steps)': 'a63a68d1-24aa-4a22-af9a-224e43209ea4',
+    'MuonH (best, 3325 steps)': '20260430_muonh/9319c798-6643-464a-b407-b05468e468f5',
+    # 'AdamH (best, 4875 steps)': '20260430_adamh/7533dd87-107f-4a4f-8229-acbec0fb00ac',
+    'Muon² (best, 3325 steps)': '20260501_muonsq/bb903816-ea27-4f5f-8028-c963d38c6a7f',
+    'NorMuonH (best, 3275 steps)': '20260430_normuonh/f45b5dcf-16bb-4e83-b5c7-4ef4981f0e9f',
+    'FOOF (default)': 'c718fa98-d45f-4b24-a01f-a6a0559c6a31',
+    'FOOF (cooldown 0.5)': 'logs/20260503_035759_598139/20260503_035812_697861',
+    'FOOF (beta 0.9)': 'logs/20260503_041609_179584/20260503_041622_100851',
 }
+assert len(runs) <= len(colors)
 pattern = re.compile(r'step:(\d+)/(\d+)\s+val_loss:([0-9.]+)')
 out = 'figure.png'
 
@@ -19,9 +40,13 @@ plt.style.use('seaborn-v0_8-whitegrid')
 fig, ax = plt.subplots(figsize=(5.5, 4), dpi=180)
 
 max_step = 0
-for label, (logfile, color) in runs.items():
+for i, (label, logfile) in enumerate(runs.items()):
     steps, losses = [], []
-    path = f'results/{logfile}.txt'
+    logfile = logfile.rstrip('.txt')
+    if logfile.startswith("logs/"):
+        path = f'/workspace/modded-nanogpt/{logfile}.txt'
+    else:
+        path = f'results/{logfile}.txt'
     with open(path, 'r') as f:
         for line in f:
             m = pattern.search(line)
@@ -45,7 +70,7 @@ for label, (logfile, color) in runs.items():
         markersize=2.0,
         linewidth=1.0,
         label=label,
-        color=color,
+        color=colors[i],
     )
 
 ax.axhline(3.28, color='gray', linestyle='--', linewidth=1.0)
