@@ -18,7 +18,7 @@ default_hparams = {
     "train_steps": 3250,
     "cooldown_frac": 0.7,
     "fw_alpha_cooldown_frac": 0.0,
-    "fw_alpha_final_val": None,
+    "fw_alpha_final_val": 1.0,
     "lr": 0.02,
     "beta_1": 0.95,
     "nesterov": True,
@@ -35,6 +35,7 @@ grid_blocks = [
     {"fw_alpha_method": ["first_fw"], "fw_alpha_mult": [1.0]},  # logs/20260503_033646
     {"cooldown_frac": [0.5]},  # logs/20260503_035759_598139  
     {"beta_1": [0.9, 0.99]},   # logs/20260503_041609_179584
+    {"fw_alpha_mult": [5.0], "fw_alpha_cooldown_frac": [0.5], "cooldown_frac": [0.5]}
     # {"lr": [0.01, 0.03]},
 ]
 

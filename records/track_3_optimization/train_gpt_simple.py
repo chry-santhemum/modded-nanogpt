@@ -470,7 +470,7 @@ def parse_args():
     parser.add_argument("--train-steps", type=int, default=3375)
     parser.add_argument("--cooldown-frac", type=float, default=0.7)
     parser.add_argument("--fw-alpha-cooldown-frac", type=float, default=0.0)
-    parser.add_argument("--fw-alpha-final-val", type=float, default=None)
+    parser.add_argument("--fw-alpha-final-val", type=float, default=1.0)
     parser.add_argument("--lr", type=float, default=None)
     parser.add_argument("--beta-1", type=float, default=None)
     parser.add_argument("--nesterov", action=argparse.BooleanOptionalAction, default=None)

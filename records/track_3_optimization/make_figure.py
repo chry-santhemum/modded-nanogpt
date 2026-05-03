@@ -37,7 +37,7 @@ pattern = re.compile(r'step:(\d+)/(\d+)\s+val_loss:([0-9.]+)')
 out = 'figure.png'
 
 plt.style.use('seaborn-v0_8-whitegrid')
-fig, ax = plt.subplots(figsize=(5.5, 4), dpi=180)
+fig, ax = plt.subplots(figsize=(5.5, 4), dpi=600)
 
 max_step = 0
 for i, (label, logfile) in enumerate(runs.items()):
@@ -67,8 +67,8 @@ for i, (label, logfile) in enumerate(runs.items()):
         steps,
         losses,
         marker='o',
-        markersize=2.0,
-        linewidth=1.0,
+        markersize=1.5,
+        linewidth=0.75,
         label=label,
         color=colors[i],
     )
