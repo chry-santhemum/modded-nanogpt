@@ -35,6 +35,7 @@ runs = {
     # 'FOOF (cooldown 0.5 both)': 'logs/20260503_045252_672097/20260503_045305_632893.txt',
     'FOOF (best, lr 0.035)': 'logs/20260503_151004_618338/20260503_151016_365663.txt',
     'FOOF (best, lr 0.05)': 'logs/20260503_151004_618338/20260503_152922_930647.txt',
+    'FOOF (first_fw)': 'logs/20260503_194643_272898/20260503_194655_656643.txt',
 }
 assert len(runs) <= len(colors)
 pattern = re.compile(r'step:(\d+)/(\d+)\s+val_loss:([0-9.]+)')

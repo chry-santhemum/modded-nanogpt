@@ -1,0 +1,28 @@
+{
+  "grid_block": {
+    "cooldown_frac": [
+      0.6
+    ],
+    "lr": [
+      0.04
+    ],
+    "weight_decay": [
+      0.02
+    ],
+    "fw_alpha_mult": [
+      3.0
+    ],
+    "fw_alpha_method": [
+      "first_fw"
+    ]
+  },
+  "runs": [
+    {
+      "cooldown_frac": 0.6,
+      "lr": 0.04,
+      "weight_decay": 0.02,
+      "fw_alpha_mult": 3.0,
+      "fw_alpha_method": "first_fw"
+    }
+  ]
+}
