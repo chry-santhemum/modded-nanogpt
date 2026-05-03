@@ -379,14 +379,15 @@ class MuonFOOF(torch.optim.Optimizer):
                             raw_second_moment,
                         )
                     alpha = group["fw_alpha_mult"] * alpha_base
+                    update_scale = max(1, p.size(0) / p.size(1))**0.5
                     update = solve_spectral_fw(
                         momentum_update,
                         raw_second_moment,
-                        alpha=alpha,
+                        alpha=alpha / update_scale,
                         fw_steps=group["fw_steps"],
                         fw_gamma_method=group["fw_gamma_method"],
                     )
-                    update *= max(1, p.size(0) / p.size(1))**0.5
+                    update *= update_scale
 
                     p.mul_(1 - group["lr"] * group["weight_decay"])
                     p.add_(update, alpha=-group["lr"])
@@ -468,7 +469,6 @@ def parse_args():
     parser.add_argument("--fw-alpha-cooldown-frac", type=float, default=0.0)
     parser.add_argument("--fw-alpha-final-val", type=float, default=1.0)
     parser.add_argument("--lr", type=float, default=None)
-    parser.add_argument("--lr-final-val", type=float, default=None)
     parser.add_argument("--beta-1", type=float, default=None)
     parser.add_argument("--nesterov", action=argparse.BooleanOptionalAction, default=None)
     parser.add_argument("--fw-alpha-method", choices=["mean_iso", "first_fw"], default=None)
@@ -476,10 +476,10 @@ def parse_args():
     parser.add_argument("--fw-steps", type=int, default=None)
     parser.add_argument("--fw-gamma-method", choices=["line_search", "default"], default=None)
     parser.add_argument("--weight-decay", type=float, default=None)
-    parser.add_argument("--activation-stat-dtype", choices=["bf16", "fp32"], default="bf16")
+    parser.add_argument("--activation-stat-dtype", choices=["bf16", "fp32"], default="fp32")
     parser.add_argument("--log-dir", type=Path, default=Path("logs"))
     parser.add_argument("--sweep-name", default=None)
-    parser.add_argument("--mbs", type=int, default=64)
+    parser.add_argument("--mbs", type=int, default=32)
     parser.add_argument("--val-mbs", type=int, default=None)
     parser.add_argument("--local-rank", "--local_rank", type=int, default=None)
     args = parser.parse_args()
@@ -488,7 +488,6 @@ def parse_args():
     assert 0 < args.cooldown_frac <= 1
     assert 0 <= args.fw_alpha_cooldown_frac <= 1
     assert args.fw_alpha_final_val is None or args.fw_alpha_final_val >= 0
-    assert args.lr_final_val is None or args.lr_final_val >= 0
     args.val_mbs = args.mbs if args.val_mbs is None else args.val_mbs
     return args
 
@@ -558,7 +557,6 @@ for trial in range(args.num_trials):
     train_hparams = {
         "train_steps": args.train_steps,
         "cooldown_frac": args.cooldown_frac,
-        "lr_final_val": args.lr_final_val,
         "fw_alpha_cooldown_frac": args.fw_alpha_cooldown_frac,
         "fw_alpha_final_val": args.fw_alpha_final_val,
         "activation_stat_dtype": args.activation_stat_dtype,
@@ -638,15 +636,6 @@ for trial in range(args.num_trials):
             for group in opt.param_groups:
                 group["lr"] = group["initial_lr"] * eta
                 if "initial_fw_alpha_mult" in group:
-                    if args.lr_final_val is not None:
-                        if progress < 1 - cooldown_frac:
-                            group["lr"] = group["initial_lr"]
-                        else:
-                            lr_progress = (progress - (1 - cooldown_frac)) / cooldown_frac
-                            group["lr"] = (
-                                group["initial_lr"]
-                                + lr_progress * (args.lr_final_val - group["initial_lr"])
-                            )
                     group["fw_alpha_mult"] = get_fw_alpha_mult(step, group["initial_fw_alpha_mult"])
 
 
@@ -714,3 +703,37 @@ for trial in range(args.num_trials):
                + f" step_avg:{1000*approx_training_time/(step + 1):.2f}ms", console=True, log=False)
 
 dist.destroy_process_group()
+
+====================================================================================================
+Running PyTorch 2.11.0+cu128 compiled for CUDA 12.8 on NVIDIA H100 80GB HBM3 with world_size 8
+====================================================================================================
+trial:1/1 train_hparams:{'train_steps': 3375, 'cooldown_frac': 0.6, 'fw_alpha_cooldown_frac': 0.3, 'fw_alpha_final_val': 0.5, 'activation_stat_dtype': 'fp32'}
+trial:1/1 foof_hparams:{'lr': 0.02, 'fw_alpha_method': 'first_fw', 'fw_alpha_mult': 3.0, 'weight_decay': 0.02}
+step:0/3375 val_loss:10.82584 train_time:0.000s step_avg:nanms
+step:125/3375 val_loss:4.60820 train_time:103.211s step_avg:825.68ms
+step:250/3375 val_loss:4.09966 train_time:189.654s step_avg:691.55ms
+step:375/3375 val_loss:3.91899 train_time:275.833s step_avg:689.43ms
+step:500/3375 val_loss:3.82095 train_time:361.986s step_avg:689.23ms
+step:625/3375 val_loss:3.74697 train_time:448.183s step_avg:689.57ms
+step:750/3375 val_loss:3.70244 train_time:534.367s step_avg:689.47ms
+step:875/3375 val_loss:3.65977 train_time:620.488s step_avg:688.97ms
+step:1000/3375 val_loss:3.62285 train_time:706.714s step_avg:689.81ms
+step:1125/3375 val_loss:3.59941 train_time:792.779s step_avg:688.52ms
+step:1250/3375 val_loss:3.57607 train_time:878.890s step_avg:688.89ms
+step:1375/3375 val_loss:3.55518 train_time:964.960s step_avg:688.56ms
+step:1500/3375 val_loss:3.52695 train_time:1051.042s step_avg:688.65ms
+step:1625/3375 val_loss:3.50220 train_time:1137.148s step_avg:688.85ms
+step:1750/3375 val_loss:3.47959 train_time:1223.178s step_avg:688.25ms
+step:1875/3375 val_loss:3.45776 train_time:1309.250s step_avg:688.57ms
+step:2000/3375 val_loss:3.43779 train_time:1395.337s step_avg:688.69ms
+step:2125/3375 val_loss:3.42036 train_time:1481.477s step_avg:689.13ms
+step:2250/3375 val_loss:3.40239 train_time:1567.510s step_avg:688.26ms
+step:2375/3375 val_loss:3.38569 train_time:1653.594s step_avg:688.67ms
+step:2500/3375 val_loss:3.37046 train_time:1739.664s step_avg:688.56ms
+step:2625/3375 val_loss:3.35410 train_time:1825.738s step_avg:688.59ms
+step:2750/3375 val_loss:3.33916 train_time:1911.816s step_avg:688.62ms
+step:2875/3375 val_loss:3.32441 train_time:1997.875s step_avg:688.47ms
+step:3000/3375 val_loss:3.31050 train_time:2083.981s step_avg:688.85ms
+step:3125/3375 val_loss:3.29697 train_time:2170.162s step_avg:689.45ms
+step:3250/3375 val_loss:3.28667 train_time:2256.293s step_avg:689.04ms
+step:3375/3375 val_loss:3.28213 train_time:2342.359s step_avg:688.53ms
