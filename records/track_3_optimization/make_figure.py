@@ -28,11 +28,13 @@ runs = {
     # 'AdamH (best, 4875 steps)': '20260430_adamh/7533dd87-107f-4a4f-8229-acbec0fb00ac',
     'Muon² (best, 3325 steps)': '20260501_muonsq/bb903816-ea27-4f5f-8028-c963d38c6a7f',
     'NorMuonH (best, 3275 steps)': '20260430_normuonh/f45b5dcf-16bb-4e83-b5c7-4ef4981f0e9f',
-    'FOOF (default)': 'c718fa98-d45f-4b24-a01f-a6a0559c6a31',
-    'FOOF (cooldown 0.5)': 'logs/20260503_035759_598139/20260503_035812_697861',
+    # 'FOOF (default)': 'c718fa98-d45f-4b24-a01f-a6a0559c6a31',
+    # 'FOOF (cooldown 0.5)': 'logs/20260503_035759_598139/20260503_035812_697861',
     # 'FOOF (beta 0.9)': 'logs/20260503_041609_179584/20260503_041622_100851',
     # 'FOOF (beta 0.99)': 'logs/20260503_041609_179584/20260503_043431_070366.txt',
-    'FOOF (cooldown 0.5 both)': 'logs/20260503_045252_672097/20260503_045305_632893.txt',
+    # 'FOOF (cooldown 0.5 both)': 'logs/20260503_045252_672097/20260503_045305_632893.txt',
+    'FOOF (best, lr 0.035)': 'logs/20260503_151004_618338/20260503_151016_365663.txt',
+    'FOOF (best, lr 0.05)': 'logs/20260503_151004_618338/20260503_152922_930647.txt',
 }
 assert len(runs) <= len(colors)
 pattern = re.compile(r'step:(\d+)/(\d+)\s+val_loss:([0-9.]+)')
